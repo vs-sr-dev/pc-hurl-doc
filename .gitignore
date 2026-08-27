@@ -1,0 +1,25 @@
+# never commit game data or anything extracted from it
+out/
+_work/
+*.DTF
+*.RES
+*.TAB
+*.EXE
+*.COM
+*.OVL
+*.SND
+*.XMI
+*.ADV
+*.ADD
+*.OPL
+*.FLI
+*.WAV
+*.wav
+*.GIF
+*.gif
+*.LBM
+*.PNG
+*.png
+!docs/*.png
+__pycache__/
+*.pyc
