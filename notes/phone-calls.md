@@ -42,7 +42,7 @@ payphone coin, in banks 1, 2 and 5; `bing.snd` in banks 3, 4 and 6–9.
 | BOB9 | 16 | 58.8 s | `bing`, `bobpff01–04`, `hambff01–11` |
 | BOB10 | 8 | 28.8 s | `bobcall`, `bobsuds`, `bobmortl`, `bobnaked`, `bobhere`, `bobburp`, `boblook`, `bobfoot` |
 
-¹ at 11025 Hz; the `.SND` files store no rate
+¹ at 11000 Hz, the rate H.EXE puts in SNDSTRUC.frequency
 ([docs/06-audio.md](../docs/06-audio.md)).
 
 Plus `END.RES` — `bobpeg01.snd`, `bobpeg02.snd`, 11.1 s — and 12 clips in

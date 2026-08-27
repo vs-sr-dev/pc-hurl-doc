@@ -110,6 +110,10 @@ Left number is the wall slot referenced from the map grid; right number is a
 booth, two exit signs) and the comment `begin level specific walls` marks
 where the level's own art starts. Levels declare between 52 and 103 walls.
 
+`LoadType:` sits inside this block and is `1` everywhere. The parser stores it
+as a single byte at `ACKENG + 0xe461`, so it is an engine field rather than
+anything the game reads.
+
 ## The object table and object descriptions
 
 ```
@@ -142,9 +146,35 @@ thirty kinds of thing.
 `Speed` is 1 for 893 of the 1,541 definitions (static scenery); moving things
 use 9–61, and the projectile speed is uniformly 61.
 
-`Direction` uses **1920 units to the full turn**, exactly as the comment says:
-the values that occur are 0 (1332×), 1440 = 270° (105×), 960 = 180° (53×),
-1680 = 315° (33×), 480 = 90° (13×), and a handful of odd ones.
+### The direction comment is wrong, and the designers followed it
+
+Every object block repeats the same comment:
+
+```
+;Number,Speed,ID#,Direction(30=160,45=240,90=480,180=960,270=1440)
+```
+
+That is a scale of **1920 units to the turn**, and the values in the files
+match it: 0 (1332×), 1440 (105×), 960 (53×), 1680 (33×), 480 (13×), 1700,
+180, 1320 — all of which are round angles at 1920 per turn (270°, 180°, 315°,
+90°).
+
+The engine uses **1800**. Its trig tables have 1800 entries at 0.2° per step,
+the heading is wrapped with `sub …, 1800` throughout, and the caster's
+quadrant boundaries are 450 and 1350 ([01-executables.md](01-executables.md)).
+
+Under the engine's real scale the shipped values are not round at all:
+
+| Written | Comment says | Engine gets |
+|---:|---:|---:|
+| 480 | 90° | **96°** |
+| 960 | 180° | **192°** |
+| 1440 | 270° | **288°** |
+| 1680 | 315° | **336°** |
+
+So every object the designers meant to face due south is 12° off, and every
+"west" is 18° off. The same applies to `PlayerAngle:`, where `LEV3` and
+`LEV10` both use 1440.
 
 ### States
 

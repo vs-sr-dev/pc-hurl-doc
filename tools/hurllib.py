@@ -165,20 +165,44 @@ def save_png(path, w, h, pixels, palette):
 # ------------------------------------------------------------------ the maps
 
 MAP_W = MAP_H = 64
+MAP_CELLS = MAP_W * MAP_H          # 4096
 MAP_PLANES = 6
-MAP_GRID_BYTES = MAP_W * MAP_H * MAP_PLANES * 2
 
-PLANE_NAMES = ['wall-N/S', 'objects', 'wall-alt-A', 'wall-alt-B',
-               'floor', 'ceiling']
+# AckReadMapFile in H.EXE issues six fread() calls of exactly these sizes,
+# in this order, and the game's own code names the destinations.  Note that
+# xGrid and yGrid are read 8712 bytes each, not 8192: the array is 4356
+# uint16 (66 x 66), of which only the first 4096 are the 64 x 64 grid.
+PLANE_SIZES = [8192, 8192, 8712, 8712, 8192, 8192]
+PLANE_NAMES = ['map', 'objects', 'xGrid', 'yGrid', 'floor', 'ceiling']
+MAP_GRID_BYTES = sum(PLANE_SIZES)  # 50192
 
 
 def parse_map(chunk):
-    """Split a .DTF map chunk into its six 64x64 uint16 planes plus the tail."""
+    """Split a .DTF map chunk into its six grids plus the trailing list.
+
+    Every plane is returned truncated to the 4096 cells that are addressed;
+    the 260 spare uint16 at the end of xGrid and yGrid are dropped (they are
+    empty in every shipped level).
+    """
     planes = []
-    n = MAP_W * MAP_H
-    for p in range(MAP_PLANES):
-        planes.append(list(struct.unpack_from('<%dH' % n, chunk, p * n * 2)))
+    off = 0
+    for size in PLANE_SIZES:
+        planes.append(list(struct.unpack_from('<%dH' % MAP_CELLS, chunk, off)))
+        off += size
     return planes, chunk[MAP_GRID_BYTES:]
+
+
+def map_slack(chunk):
+    """The 260 unaddressed uint16 at the end of xGrid and of yGrid."""
+    out = []
+    off = 0
+    for i, size in enumerate(PLANE_SIZES):
+        if size > MAP_CELLS * 2:
+            n = (size - MAP_CELLS * 2) // 2
+            out.append(list(struct.unpack_from(
+                '<%dH' % n, chunk, off + MAP_CELLS * 2)))
+        off += size
+    return out
 
 
 def cell(plane, x, y):
@@ -259,7 +283,7 @@ def parse_inf(text):
 
 # --------------------------------------------------------------------- audio
 
-def snd_to_wav(raw, rate=11025):
+def snd_to_wav(raw, rate=11000):
     """Wrap a raw unsigned 8-bit mono .SND in a RIFF/WAVE header."""
     hdr = b'RIFF' + struct.pack('<I', 36 + len(raw)) + b'WAVEfmt '
     hdr += struct.pack('<IHHIIHH', 16, 1, 1, rate, rate, 1, 8)

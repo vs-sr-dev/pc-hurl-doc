@@ -1,9 +1,9 @@
 # 09 — Leftovers, fossils and things nobody cleaned up
 
 H.U.R.L. shipped with an unusual amount of its own making-of still attached.
-Some of it is a naming change that was applied late and incompletely; some is
-a build pipeline that wrote out buffers it had not filled; and some is simply
-another company's SDK sample data riding along on the retail disc.
+Some of it is a naming change applied late and incompletely; some is a design
+that was written, wired up and never used; and some is simply another
+company's SDK sample data riding along on the retail disc.
 
 ## The game is called Slob Zone
 
@@ -13,22 +13,56 @@ the rebrand stops at the outer layer.
 | Where | What it says |
 |---|---|
 | `H.EXE` copyright block, `0x2ada0` | **H.U.R.L.** |
-| `credits.gif`, `hurl.gif`, `hurl1.gif` | **H.U.R.L.** |
+| `credits.gif`, `hurl.gif` | **H.U.R.L.** |
 | the game's own C source file, in an assertion | **`slob.c`** |
 | the out-of-memory message | **`Slob Zone needs at least 3Mb free.`** |
-| title art in `GRAPH.RES` | `slobtitl.gif`, `slobttl1/2/3.gif` — a full **SLOB ZONE 3D** title screen with the cast lined up |
+| title art in `GRAPH.RES` | `slobtitl.gif` and **three more** — see below |
 | all ten between-level cards in `CUT.RES` | the **Slob Zone** logo, never the H.U.R.L. one |
 | a name in `H.EXE` with no file behind it | **`slobad.gif`** |
 
-Both title screens are present and both are referenced by the executable, in
-the same intro run (`intro.xmi`, `slobad.gif`, `deeplogo.xmi`, `intro1.gif`,
-`slobtitl.gif`, `mlogo.xmi`, `mlogo.fli`, `hurl.gif`, `hurlcq.xmi` …), so the
-disc can show you either one. The cutscene art was never redrawn.
+The intro function at `0x12afe` runs straight through both brandings:
+`slobad.gif` → `deeplogo.xmi` → `intro1.gif` → **`slobtitl.gif`** →
+`mlogo.fli` → **`hurl.gif`** → `hurlcq.xmi` → `intro2.gif` → … →
+`charscrn.gif`. Both title screens are shown, one after the other, and the
+cutscene art was never redrawn.
 
-`slobad.gif` — the "Slob ad" screen — is one of only two file names in
-`H.EXE` that nothing on the disc can satisfy. The other is `trig.dat`, the
-name ACK-3D uses for the trig tables that here live inside `KIT.OVL`
-([01-executables.md](01-executables.md)).
+`slobad.gif` — the "Slob ad" screen, and the very first thing the intro tries
+to load — is one of only two file names in `H.EXE` that nothing on the disc
+can satisfy. The other is `trig.dat` ([01](01-executables.md)).
+
+## Four title screens that were never meant to ship together
+
+`GRAPH.RES` holds six title pictures. `H.EXE` names two of them. The other
+four are never referenced by any literal string or filename template:
+
+| Member | What it shows |
+|---|---|
+| `slobtitl.gif` | **SLOB ZONE 3D**, the cast lined up — *used* |
+| `hurl.gif` | **H.U.R.L.**, a completely different painting — *used* |
+| `slobttl1.gif` | the Slob Zone painting captioned **SPECIAL EDITION**, and *"FROM BOB'S GAS STATION TO THE HAIRBALL TRAILER PARK!"* |
+| `slobttl2.gif` | the same painting captioned **3 WORLD EDITION** |
+| `slobttl3.gif` | the same painting captioned **1 WORLD EDITION** |
+| `hurl1.gif` | the Slob Zone painting with the **H.U.R.L.** logo pasted over it |
+
+A one-world edition, a three-world edition and a special edition — a tiered
+shareware/retail line-up that was drawn and abandoned. What shipped is ten
+levels under a fourth name, and all four alternative title screens travelled
+to the pressing plant inside the archive.
+
+## An objective system that was built and never used
+
+Three keywords Deep River added to the level parser are used by no shipped
+level: `LevelType:`, `Timer:` and `Rect:`. All three are fully implemented.
+
+`Rect:` parses four integers with `sscanf(rest, "%d, %d, %d, %d", …)` into
+four globals, and those globals are read at `0x14ef8` by a loop over the
+engine's object list that converts each object's position to a cell and tests
+whether it falls inside the rectangle. A level type, a countdown timer, and a
+trigger rectangle tested for the presence of objects — written, wired up, and
+never switched on. See [01-executables.md](01-executables.md).
+
+The fourth unused keyword, `PALFILE:`, is ACK-3D's own, and is parsed as a
+*number* rather than a file name.
 
 ## `PICS.DTF` is an old copy of level 2
 
@@ -52,9 +86,9 @@ PICS:  Number: 142,1,147,0      LEV2:  Number: 142,1,19,0
 ```
 
 Eleven objects had `MULTIVIEW`/`SHOWONCE` swapped for `PASSABLE` on their
-destruction state, and four objects were moved from the scenery type range
-(142, 147) into the interactive range (20 = TOILET, 19 = HYDRANT WET). The map
-also differs: `PICS` places 125 objects where `LEV2` places 130.
+destruction state, and four moved from the scenery type range (142, 147) into
+the interactive range (20 = TOILET, 19 = HYDRANT WET). The map differs too:
+`PICS` places 125 objects where `LEV2` places 130.
 
 Whichever direction the edit went, `PICS.DTF` is a full second copy of a
 level — 681 kB of the disc — that the game never loads under that name, since
@@ -75,16 +109,14 @@ The designers put them in a corner. In `LEV1`:
   ( 1, 0) #80  DUCK EGG-2        type 5
   …
   ( 0, 3) #1   WATER BALLOON-1   type 5
-  ( 1, 3) #2   WATER BALLOON-2   type 5
-  …
   ( 0, 4) #6   BAR OF SOAP-1     type 6
   ( 0, 5) #11  DEODORANT-1       type 7
 ```
 
 Five of each, stacked in rows in the sealed nine-by-eleven room in the
 top-left of the map — and the first column of each row sits at `x = 0`, which
-plane 0 marks as solid border wall. In ten of the eleven level files **every
-single projectile-class object** (types 5, 6, 7 and 15) is in that top-left
+the map grid marks as solid border wall. In ten of the eleven level files
+**every** projectile-class object (types 5, 6, 7 and 15) is in that top-left
 block; the eleventh, `LEV4`, uses the same trick shifted to `x = 28…35` along
 the top edge.
 
@@ -92,32 +124,25 @@ This is also why the level scripts contain 1,541 object definitions for about
 thirty kinds of thing: `WATER BALLOON-1` through `-5` are five separate,
 identical, fully written-out blocks because five water balloons exist.
 
-## The map compiler's uninitialised buffer
+## Nine of the eleven maps carry nothing but a copied template
 
-Every map chunk has 1040 unused bytes between the grids and the trailing
-record list. In five files they are zero. In the other six they hold one tile
-index repeated hundreds of times — `19` in LEV3 and LEV7, `29` in LEV4 and
-LEV8, `16` in LEV6, `13` in LEV9 — which is what the tail of a floor-plane
-fill looks like. Six of the ten shipped levels carry a fossil of the level
-compiler's own working memory ([04-maps.md](04-maps.md)).
+Every map chunk ends with a list of per-cell records. Ten of them are shared
+across level files — five appear in **all eleven**, five more in seven — and
+in nine of the eleven files those copied records are the *only* records
+present. In most levels the cells they name are empty in all three wall grids,
+so they point at nothing.
 
-## Five records copied into every level
+Only `LEV1` (11 of its 21) and `LEV10` (8 of 18) contribute records of their
+own. Somebody made a template level early on and every level since carried its
+leftovers. [04-maps.md](04-maps.md) has the table.
 
-The trailing record list of the map chunk starts, in **all eleven files**,
-with the same five records:
-
-```
-cell  449 (1, 7)   value 0    extra 0
-cell  647 (7,10)   value 5    extra 0
-cell  661 (21,10)  value 6    extra 3
-cell  771 (3,12)   value 2    extra 1541
-cell 2278 (38,35)  value 16   extra 9265
-```
-
-Five more are shared by seven of the eleven. The `extra` field is zero in
-every genuine, level-specific record — and the only two records with garbage
-in it, 1541 and 9265, are among the five that never change. Somebody made a
-template level, and every level since has carried its leftovers.
+> **Correction.** The first pass of this repository reported a "1040-byte
+> uninitialised gap" in every map chunk, holding fossilised level-compiler
+> memory in six of the ten levels. That was wrong: it came from assuming six
+> equal 8192-byte planes. `AckReadMapFile` actually reads xGrid and yGrid as
+> **8712** bytes each, and what looked like a gap is the tail of the ceiling
+> grid — real data. The repeated values in levels 3, 4, 6, 7, 8 and 9 are
+> those levels' ceilings, not stale memory.
 
 ## Somebody else's SDK demo, on the retail disc
 
@@ -160,6 +185,17 @@ directory, and it is noted here so nobody mistakes it for one
 
 ## Smaller things
 
+* **The retail build is its own level test harness.** Alongside the
+  documented `-s`, `H.EXE` accepts `-l<n>` to start on any level 1–10, `-f`
+  to load an arbitrary level file by name, `-n` to skip the intro, `-g` for
+  god mode and `-c` for a fourth mode. Switches may be introduced with `-`
+  *or* `/`, and the letters are matched case-insensitively.
+
+* **Every angle in the level scripts is wrong by the comment's own
+  arithmetic.** The scripts document directions as 1920 units to the turn; the
+  engine wraps at 1800. A "90°" in the data is 96° in the game.
+  See [03-level-scripts.md](03-level-scripts.md).
+
 * **`HURL4M.BAT`** on the disc is not what the installer writes. The installer
   generates `HURL4MEG.BAT` pointing at the CD; the file actually shipped
   points at a developer's machine:
@@ -173,6 +209,10 @@ directory, and it is noted here so nobody mistakes it for one
 
   `G:\RELEASE\MILLEN` — the build share, and the project's internal folder
   name, "millen" for Millennium.
+
+* **Debug output survived into the retail build**: an FPS counter, a
+  `pic%04d.raw` screen dump, per-hit tracing of objects, X-walls, Y-walls and
+  doors, and `DANGER:` warnings on the engine's own object arrays.
 
 * **`ERR_TOMANYVIEWS`** is spelled that way in the engine's error table, and
   `VECTOR.COM` describes itself as a `REAL-MODE INTERUPT VECTOR TRAPPER`.
@@ -189,10 +229,6 @@ directory, and it is noted here so nobody mistakes it for one
   `3.XMI`, `8.XMI` = `4.XMI`, `9.XMI` = `6.XMI` byte for byte, and `BOB9.RES`
   contains exactly the same sixteen speech clips as `BOB6.RES`, merely
   reordered. Ten levels, seven pieces of music, seven telephone calls.
-
-* **Debug output survived into the retail build**: an FPS counter, a
-  `pic%04d.raw` screen dump, per-hit tracing of objects, X-walls, Y-walls and
-  doors, and the two developer switches that print `God Mode!` and `No Intro`.
 
 * **Deluxe Paint's own bookkeeping** — a `GRAB` hotspot, a `TINY` thumbnail
   and sixteen `CRNG` colour-cycle ranges — is still inside the font image in

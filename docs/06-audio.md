@@ -19,10 +19,20 @@ python tools/hurlaudio.py "<install>" banks out/speech
 46 files, 640,494 bytes. There is no header, no magic, no length and no
 sample rate: a `.SND` is **raw unsigned 8-bit mono PCM**, silence being 0x80,
 handed straight to DIGPAK's `DigPlay`, which takes the rate from the caller's
-`SNDSTRUC`. The rate is therefore **not recoverable from the files** — the
-tools default to 11025 Hz, which is DIGPAK's usual rate for this period and
-gives plausible lengths (`TOILET.SND`, the longest at 80,726 bytes, becomes a
-7.3-second flush).
+`SNDSTRUC`.
+
+The rate is not in the files, but it is in the game. `H.EXE` fills the
+structure in three places (`0x1caa1`, `0x1cb46`, `0x1cbe1`) and every one of
+them writes the same value into the field at offset `0x0A`, which is
+`SNDSTRUC.frequency`:
+
+```
+mov word ptr [eax + 0xa], 0x2af8      ; 11000
+```
+
+**11,000 Hz** — not 11,025. At that rate `TOILET.SND`, the longest sound in
+the game at 80,726 bytes, is a 7.3-second flush, and the telephone calls run
+28 to 95 seconds. The tools take `11000` as their default.
 
 `H.EXE` names 25 of them directly, including `Duckdone.snd`, `Pigchew.snd`,
 `Twister.snd`, `cashreg.snd`, `dooropen.snd`, `Toilet.snd` and `Surrend.snd`.
@@ -68,7 +78,7 @@ and 6–9.
 `END.RES` adds `bobpeg01.snd` and `bobpeg02.snd`, and `INTRO.RES` carries 12
 more clips (50.7 s), of which `qcut7.snd` and `qcut8.snd` are byte-identical.
 
-Durations above assume 11025 Hz; at 22050 Hz halve them.
+Durations are at 11,000 Hz.
 
 ## Music: 18 XMIDI files
 

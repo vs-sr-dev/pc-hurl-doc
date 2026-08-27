@@ -4,6 +4,7 @@
     python tools/hurlmap.py <install> ascii  <LEV1> [plane]
     python tools/hurlmap.py <install> png    <LEV1> <out.png>
     python tools/hurlmap.py <install> tail   <LEV1>        # the trailing list
+    python tools/hurlmap.py <install> shared               # boilerplate records
     python tools/hurlmap.py <install> runs                 # X/Y grid evidence
     python tools/hurlmap.py <install> walls                # wall flag bits
     python tools/hurlmap.py <install> objects <LEV1>       # placed objects
@@ -82,20 +83,49 @@ def cmd_png(base, which, out, scale=8):
 
 
 def cmd_tail(base, which):
-    _inf, (_planes, tail) = load(os.path.join(base, which + '.DTF'))
-    body = tail[2:]
-    print('%s: %d trailing bytes, leading uint16 = %d, %d 5-byte records'
-          % (which, len(tail), struct.unpack_from('<H', tail, 0)[0],
-             len(body) // 5))
-    shown = 0
-    for i in range(len(body) // 5):
-        a, b, c = struct.unpack_from('<HBH', body, i * 5)
-        if not (a or b or c):
-            continue
-        print('  cell %5d (x=%2d,y=%2d)  value %3d  extra %5d'
-              % (a, a % H.MAP_W, a // H.MAP_W, b, c))
-        shown += 1
-    print('  %d non-empty records' % shown)
+    """The trailing per-cell list.
+
+    AckReadMapFile reads a uint16 count and then, for each entry, a uint16
+    cell index followed by exactly three bytes which it treats as a
+    NUL-terminated string: the length is strlen(), capped at 3, and the
+    result is stored as a length-prefixed byte list hung off four per-cell
+    pointer arrays (cell and cell+1 in one, cell and cell+64 in the other).
+    """
+    inf, (planes, tail) = load(os.path.join(base, which + '.DTF'))
+    wall = {slot: c for slot, _res, c in inf['walls']}
+    count = struct.unpack_from('<H', tail, 0)[0]
+    print('%s: %d records in %d trailing bytes' % (which, count, len(tail)))
+    pos = 2
+    for _i in range(count):
+        cell = struct.unpack_from('<H', tail, pos)[0]
+        payload = tail[pos + 2:pos + 5].split(b'\0')[0]
+        pos += 5
+        base_wall = planes[0][cell]
+        print('  (%2d,%2d) %d value%s %-12s  cell wall %#06x %s'
+              % (cell % H.MAP_W, cell // H.MAP_W, len(payload),
+                 '' if len(payload) == 1 else 's',
+                 ','.join(str(b) for b in payload) or '-',
+                 base_wall, wall.get(base_wall & 0xff, '')[:18]))
+
+
+def cmd_shared(base):
+    """Records that are identical across level files - copied boilerplate."""
+    import collections
+    seen = collections.Counter()
+    total = 0
+    for p in levels(base):
+        _inf, (_planes, tail) = load(p)
+        count = struct.unpack_from('<H', tail, 0)[0]
+        total += 1
+        for i in range(count):
+            seen[tail[2 + i * 5:7 + i * 5]] += 1
+    print('records present in all %d map files:' % total)
+    for rec, n in seen.most_common():
+        cell = struct.unpack_from('<H', rec, 0)[0]
+        payload = rec[2:].split(b'\0')[0]
+        print('  x%-2d  cell %5d (%2d,%2d)  %s'
+              % (n, cell, cell % H.MAP_W, cell // H.MAP_W,
+                 ','.join(str(b) for b in payload) or '(empty)'))
 
 
 def cmd_runs(base):
@@ -187,6 +217,8 @@ def main(argv):
         cmd_png(base, argv[3], argv[4])
     elif cmd == 'tail':
         cmd_tail(base, argv[3])
+    elif cmd == 'shared':
+        cmd_shared(base)
     elif cmd == 'walls':
         cmd_walls(base)
     elif cmd == 'runs':

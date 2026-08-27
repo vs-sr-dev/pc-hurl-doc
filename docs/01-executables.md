@@ -6,7 +6,24 @@ python tools/hurlexe.py "<install>" keywords
 python tools/hurlexe.py "<install>" trig
 python tools/hurlexe.py "<install>" ghosts
 python tools/hurlexe.py "<install>" strings H.EXE
+
+python tools/hurlle.py  "<install>" info          # the LE image
+python tools/hurlle.py  "<install>" xref  0x30924 # who references an address
+python tools/hurlle.py  "<install>" dis   0x1c270 # disassemble
 ```
+
+## Reading the code
+
+`H.EXE` is an MZ stub plus a Rational `LE` image at file offset `0x2a88`.
+`tools/hurlle.py` rebuilds the flat address space DOS/4GW would create: two
+objects, code at `0x00010000` (124,995 bytes) and data at `0x00030000`
+(382,032 bytes), entry point `0x0001a82c`.
+
+It also **applies the LE fixup records** — 4,275 of them. That matters: in the
+file as stored, every immediate that refers to a global holds an offset inside
+its target object, so searching for the address of a string finds nothing at
+all. After relocation the cross-references are exact, which is how everything
+below was found.
 
 ## The six binaries
 
@@ -62,11 +79,30 @@ before comparing. The eleven Deep River keywords are stored with exactly the
 capitalisation the `.INF` files use, which is the signature of a literal
 comparison added alongside the original parser rather than inside it.
 
-Four keywords are never used by any shipped level: **`PALFILE:`** (ACK-3D's,
-for an external palette) and **`LevelType:`, `Timer:`, `Rect:`** (Deep
-River's). `Rect:` is immediately followed in the data segment by the format
-string `%d, %d, %d, %d`, so it took four integers. See
-[10-open-questions.md](10-open-questions.md).
+Four keywords are never used by any shipped level — and all four are fully
+implemented in the parser at `0x108f0`–`0x10f07`:
+
+| Keyword | What the parser does |
+|---|---|
+| `PALFILE:` | `atoi` into `[0x31ce4]`. ACK-3D's, and note it parses a *number*, not a file name |
+| `LevelType:` | `atoi` into `[0x31d2a]` |
+| `Timer:` | `atoi` into `[0x31d1e]` |
+| `Rect:` | `sscanf(rest, "%d, %d, %d, %d", &[0x31d1a], &[0x31d16], &[0x31d18], &[0x31d14])` |
+
+The four `Rect:` destinations are not dead. They are read together at
+`0x14ef8`, in a loop over the engine's object list that converts each object's
+world position to a cell and tests whether it falls inside the rectangle:
+
+```
+cmp si, [0x31d1a] / jl  outside
+cmp si, [0x31d18] / jg  outside
+cmp ax, [0x31d16] / jl  outside
+cmp ax, [0x31d14] / jle inside
+```
+
+A level type, a countdown, and a rectangle tested for the presence of
+objects — an objective system that was written, wired up, and then never used
+by a single shipped level.
 
 ### Debug output that survived into the retail build
 
@@ -90,14 +126,45 @@ God Mode!
 pic%04d.raw
 ```
 
-`God Mode!` and `No Intro` are the two messages a developer switch prints.
-`pic%04d.raw` is a numbered screen-dump filename. How any of the three is
-triggered is not resolved here — the switches are compared as characters in
-code, and no option string survives in the data segment.
+`God Mode!` and `No Intro` are printed by two of the command-line switches
+below. `pic%04d.raw` is a numbered screen-dump filename.
 
 The `Xwall` / `Ywall` pair is worth noting on its own: it confirms that the
 engine keeps its walls in two separate grids, which is exactly what the map
 chunk contains ([04-maps.md](04-maps.md)).
+
+## The command line
+
+The argument loop is at `0x131f6`. It accepts a switch introduced by either
+**`-` or `/`**, and the switch letter is matched case-insensitively through a
+binary-search ladder. Seven switches exist, and the readme documents one:
+
+| Switch | Effect |
+|---|---|
+| `-d <dir>` | copies the **next** argument into the data-directory buffer at `0x31c30` — the path the installer's `HURL.BAT` passes |
+| `-s` | sets the sound global at `0x31cd4` to −4: run without sound (documented) |
+| `-n` | prints `No Intro`, clears `0x31424`: **skip the opening sequence** |
+| `-g` | prints `God Mode!`, sets `0x31426` to 1: **invulnerability** |
+| `-l<n>` | `atoi` on the rest of the switch, clamped to 1…10, then builds `lev%d.dtf` and prints `Loading file level %d, <%s>`: **start on that level** |
+| `-f <name>` | copies the next argument as a level file name, prints `Loading file <%s>`, and sets the level index to 0: **load an arbitrary level file** |
+| `-c` | sets `0x31428` to 1; gates three blocks in the main loop |
+
+`-g` is checked in exactly two places, both immediately before a call to the
+damage routine at `0x18448`:
+
+```
+cmp word ptr [0x31426], 0
+jne skip_damage
+mov edx, 2          ; or 10 at the other site
+call 0x18448
+```
+
+So god mode is not a flag the game consults generally — it simply suppresses
+the two ways the player can be hurt: the `Hitgrid:` floor tile (2 points) and
+a projectile hit (10 points).
+
+`-l` and `-f` together are a level-warp and an arbitrary-file loader, which
+makes the retail executable its own level test harness.
 
 ### Assertions, with the engine's source file names
 
@@ -153,10 +220,16 @@ one unit is 0.2°. Verified against the real functions:
 Poles are clamped to `INT32_MAX` rather than left undefined. This is the file
 `H.EXE` still calls `trig.dat`.
 
-Note the mismatch with the level scripts: every `.INF` file comments its
-direction field as `30=160, 45=240, 90=480, 180=960, 270=1440`, i.e. 1920
-units to the turn, while these tables are 1800. See
-[10-open-questions.md](10-open-questions.md).
+**1800 units to the turn is the engine's real angular unit**, and the code
+agrees with the tables: the player's heading is wrapped with `cmp …, 0x708` /
+`sub …, 0x708` (0x708 = 1800) in eighty places, including on the heading field
+at `ACKENG + 0xd440`, and the X caster picks its quadrant with `cmp dx, 0x1c2`
+(450 = 90°) and `cmp dx, 0x546` (1350 = 270°).
+
+That contradicts the comment every level script carries —
+`Direction(30=160, 45=240, 90=480, 180=960, 270=1440)`, which is a 1920-unit
+scale. The comment is wrong, and the designers followed it: see
+[03-level-scripts.md](03-level-scripts.md).
 
 ### Chunk 1 — 8,192 bytes: a second cosine table
 

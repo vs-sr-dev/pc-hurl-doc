@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hurllib as H  # noqa: E402
 
 # .SND files carry no header at all, so the rate is the caller's business.
-# 11025 Hz is the usual DIGPAK rate for this era and gives plausible lengths.
-DEFAULT_RATE = 11025
+# H.EXE writes 11000 into SNDSTRUC.frequency at 0x1caa1, 0x1cb46 and 0x1cbe1.
+DEFAULT_RATE = 11000
 
 
 def cmd_snd(base, outdir, rate):

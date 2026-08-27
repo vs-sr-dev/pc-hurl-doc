@@ -1,112 +1,69 @@
 # 10 — Open questions
 
-Everything here is unresolved after the first pass, with the measurement that
-raises it. Nothing in the other chapters depends on any of these answers.
+The first pass of this repository listed ten open questions. A disassembly of
+`H.EXE` — see [01-executables.md](01-executables.md) for how to get at it —
+settled most of them, and corrected one answer that was wrong. What follows is
+the current state: first what is now closed, then what is still open.
 
-## 1. What is map plane 0?
+## Closed
 
-Planes 2 and 3 separate cleanly into the engine's X and Y wall grids by run
-length, in every level ([04-maps.md](04-maps.md)). Plane 0 is also full of
-wall indices, is balanced between horizontal and vertical runs, and is
-**neither the union nor the intersection** of planes 2 and 3:
+| # | Question | Answer | Where |
+|---:|---|---|---|
+| 1 | What is map plane 0? | The **map** grid: read first, used for the movement and line-of-sight test at `0x1858b`, for the automap at `0x18c4c`, and for the flag tests. The casters use the separate xGrid and yGrid, which are reads 3 and 4. | [04](04-maps.md) |
+| 2 | What were the 1040 unused bytes for? | **They do not exist.** xGrid and yGrid are read as 8712 bytes, not 8192 — the array is 4356 uint16 (66 × 66, a guard border) and only the first 4096 are addressed. The apparent gap was a bad assumption about the layout. | [04](04-maps.md), [09](09-easter-eggs-and-leftovers.md) |
+| 3 | What is the `extra` field of a map record? | There is no such field. A record is `uint16 cell` plus **three bytes read as a NUL-terminated string**, giving one to three wall values, stored length-prefixed and hung off four per-cell pointer arrays. | [04](04-maps.md) |
+| 4 | `LevelType:`, `Timer:`, `Rect:` | All three are fully implemented. `Rect:` `sscanf`s four integers that are read back at `0x14ef8` as a bounding box tested against the object list. An objective system that was never used. | [01](01-executables.md), [09](09-easter-eggs-and-leftovers.md) |
+| 5 | 1800 versus 1920 | The engine uses **1800**: the heading is wrapped with `sub …, 0x708` in eighty places and the caster's quadrant boundaries are 450 and 1350. The level scripts' comment is wrong and the designers followed it. | [03](03-level-scripts.md) |
+| 6 | How is `God Mode!` triggered? | `-g` or `/g`, case-insensitive, in the switch ladder at `0x131f6`. It sets `0x31426`, which is checked in exactly two places, both guarding the damage call at `0x18448`. Six other switches exist, including `-l<n>` for level select. | [01](01-executables.md) |
+| 7 | What sample rate are the `.SND` files? | **11,000 Hz**, written into `SNDSTRUC.frequency` at `0x1caa1`, `0x1cb46` and `0x1cbe1`. | [06](06-audio.md) |
+| 8 | Which title screen does the game show? | **Both**, in sequence: `slobtitl.gif`, then `mlogo.fli`, then `hurl.gif`. The intro is a straight-line function at `0x12afe`. | [09](09-easter-eggs-and-leftovers.md) |
+| 9 | The wall flag bits | `0x10` door, `0x40` (with `0x10`) locked, `0x20` sliding/secret, `0x08` see-through, `0x02`/`0x04` multi-height. `0x80` never occurs and its code path is dead. | [04](04-maps.md) |
+| 10 | What is `LoadType:` for? | An ACK-3D field: `atoi` into a single byte at `ACKENG + 0xe461`. Every level says 1. | [03](03-level-scripts.md) |
 
-```
-LEV1:  |p0| = 747   |p2| = 691   |p3| = 609
-       |p2 ∪ p3| = 1162    |p2 ∩ p3| = 138
-       cells in p0 but not in p2 ∪ p3 : 137
-       cells in p2 ∪ p3 but not in p0 : 552
-```
+## Still open
 
-Where both plane 0 and plane 2 are non-zero the values agree 489 times out of
-561; plane 0 against plane 3 agrees only 36 times out of 156. A plausible
-reading is that plane 0 is the editor's block map and planes 2/3 are the
-derived face grids, but the 137 cells that exist only in plane 0 contradict
-the simple version of that.
+### A. What does `-c` do?
 
-**To resolve:** disassemble the map loader, or find an ACK-3D level editor
-that writes this layout.
+The seventh command-line switch sets `[0x31428]` to 1, and that global gates
+three separate blocks in the main loop at `0x11da3`, `0x11ead` and `0x11ec5`,
+each of which is *also* gated on a second per-frame byte. It is not a cheat
+message like `-g` or `-n`, and it prints nothing. Tracing what those three
+blocks do needs more than a static read.
 
-## 2. What were the 1040 unused bytes for?
+### B. What exactly do the trailing per-cell records draw?
 
-520 `uint16` between the grids and the record count, at a fixed offset in
-every file, never written by any shipped level, and in six files still holding
-leftover tile values ([09](09-easter-eggs-and-leftovers.md)). 520 is not a
-round number in any obvious way — it is not 4096, not 64, not a multiple of 6.
+The structure is settled: one to three wall slots attached to a cell and to
+its east and south neighbours, in two pointer arrays that the wall renderer
+installs at `0x84ed8` and `0x84edc`, with a third at `0x84ee4` used by the
+see-through path. Together with the `0x02`/`0x04` flags and the
+`XRAYMULTI`/`YRAYMULTI` routines this is the engine's multi-height wall
+support — but the vertical placement of the extra slices, and why nine of the
+eleven levels ship only copied boilerplate here, are not established.
 
-## 3. What is the `extra` field of a map record?
+### C. What separates flag `0x02` from flag `0x04`?
 
-`{uint16 cell; uint8 value; uint16 extra;}`. `value` is demonstrably a wall
-slot, and the records place shop signs and statues on individual wall faces.
-`extra` is 0 in every level-specific record and non-zero only in two of the
-five boilerplate records shared by all eleven files — which suggests it is
-either unused, or used by something no shipped level does.
+Both are read only by the multi-height casters, which test them together
+(`test cx, 0x600`) and then compare the low byte against a height global at
+`0x424c4`/`0x424c6`. `0x02` appears on 173 cells in two levels, `0x04` on 20
+cells in one, all `marb1a.gif`. Whether the two bits mean different heights,
+different orientations or something else is not resolved.
 
-## 4. `LevelType:`, `Timer:` and `Rect:`
+### D. What is `0x01`, and why only ever with `0x08`?
 
-Three keywords Deep River added to the parser and never used. `Rect:` is
-followed in the data segment by the format string `%d, %d, %d, %d`, so it took
-four integers — a rectangle in map or screen coordinates. `Timer:` in a game
-with no visible timer is suggestive; so is `LevelType:` in a game whose ten
-levels are all the same type.
+185 cells carry `0x09` and none carry `0x01` alone. The automap builder tests
+exactly this bit (`and ch, 1`) and paints those cells a different colour. The
+textures are arches, black tiles and blank tiles — openings rather than
+surfaces — which suggests "passable gap", but nothing in the caster confirms
+it.
 
-`PALFILE:` is ACK-3D's own and also unused, which is less interesting.
+### E. Where did `slobad.gif` go?
 
-## 5. 1800 versus 1920
+It is the first picture the intro loads, and no archive on the disc contains
+it. Whether the intro survives the failure or the branch is simply never
+reached would need the game running.
 
-`KIT.OVL`'s seven trigonometry tables have 1800 entries per turn — 0.2° per
-step, verified against `sin`, `cos`, `tan` and their reciprocals to the last
-digit ([01](01-executables.md)). But every level script comments its direction
-field `30=160, 45=240, 90=480, 180=960, 270=1440`, i.e. **1920** per turn, and
-the values that actually occur in the files are consistent with 1920 (1440,
-960, 1680, 480). `PlayerAngle` values reach 1482.
+### F. The multi-height path in practice
 
-Either the object facing is in different units from the caster's angle and is
-converted, or the comment is inherited from a version of the engine with a
-different `INT_ANGLE_360`. The second cosine table in `KIT.OVL` chunk 1 uses a
-third resolution, 4096 steps.
-
-## 6. How is `God Mode!` triggered?
-
-The string exists, along with `No Intro`. The switches are compared as
-characters in code and no option string survives in the data segment, so this
-needs a disassembly of the argument parser. The same applies to whatever
-writes `pic%04d.raw`.
-
-## 7. What sample rate are the `.SND` files?
-
-They have no header at all — the rate is a parameter DIGPAK receives from the
-caller. 11025 Hz gives plausible durations for everything (a 7.3-second toilet
-flush, telephone calls of 30–90 seconds) and is the tools' default, but this
-is an inference from plausibility, not a measurement. The answer is in the
-`SNDSTRUC` the game fills in before calling `DigPlay`.
-
-## 8. Which title screen does the retail game actually show?
-
-`H.EXE` references `slobtitl.gif` and `hurl.gif` in the same intro sequence,
-along with `slobad.gif`, which is not on the disc. Whether one is chosen, both
-are shown in turn, or the missing file breaks the branch, needs the game
-running under a debugger.
-
-## 9. Four of the wall flag bits
-
-Wall cells above 255 are `flags << 8 | slot`, and three of the flags are
-settled by the data ([04-maps.md](04-maps.md)): `0x10` is a door, `0x40` on
-top of it makes the door need a key, and `0x08` marks a see-through texture.
-
-Four remain:
-
-| Flag | Cells | Where it lands |
-|---:|---:|---|
-| `0x01` (only ever with `0x08`) | 185 | arches, black tiles, blank tiles |
-| `0x02` | 173 | `wall2.gif`, `CLASS-1.GIF`, `LOCKER2/4.GIF` — ordinary opaque interior walls |
-| `0x04` | 20 | `marb1a.gif` only, in one level |
-| `0x20` | 23 | hedges, `LIBRARY4.GIF`, `SIDETILE.GIF`, trailer siding |
-
-`0x02` is the awkward one: 82 of its 173 cells are `wall2.gif` in a single
-level, on a texture that is not transparent, not a door and not otherwise
-special.
-
-## 10. What is the `LoadType:` value for?
-
-Every level says `LoadType: 1`, in the wall bitmap block, and nothing varies.
-ACK-3D's own keyword, so the answer is in the engine.
+`XRAYMULTI` and `YRAYMULTI` are linked in and the shipped maps do flag cells
+for them — 25 in level 8, 36 in level 10. What that looks like on screen is
+not documented here.
